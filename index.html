@@ -1,0 +1,2220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Barter Docs — Project Proposal Generator</title>
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Barlow:wght@300;400;500;600&display=swap" rel="stylesheet" />
+
+  <!-- jsPDF + html2canvas for PDF generation -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+  <style>
+    /* ─── TOKENS ─────────────────────────────────────────────── */
+    :root {
+      --black:     #0a0a0a;
+      --black-2:   #1a1a1a;
+      --grey-1:    #3a3a3a;
+      --grey-2:    #767676;
+      --grey-3:    #b0b0b0;
+      --grey-4:    #d8d8d8;
+      --grey-5:    #f0f0f0;
+      --white:     #ffffff;
+      --bg:        #f4f5f7;
+      --line:      #e0e2e6;
+      --line-dark: rgba(10,10,10,0.12);
+
+      /* Blue accent — used sparingly: active states, highlights, doc label */
+      --blue:       #1a56db;
+      --blue-light: #e8eefb;
+      --blue-mid:   #3b6fdf;
+      --accent:     #1a56db;
+
+      --font-head:  'Inter', -apple-system, 'Helvetica Neue', sans-serif;
+      --font-body:  'Barlow', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+      --font-mono:  'Space Mono', 'Courier New', monospace;
+
+      --transition: 150ms ease;
+    }
+
+    /* ─── RESET ──────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { font-size: 16px; scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--black);
+      font-family: var(--font-body);
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ─── LAYOUT ─────────────────────────────────────────────── */
+    .app-shell {
+      display: grid;
+      grid-template-columns: 420px 1fr;
+      min-height: 100vh;
+    }
+
+    /* ─── LEFT PANEL (FORM) ──────────────────────────────────── */
+    .form-panel {
+      background: var(--white);
+      color: var(--black);
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      border-right: 1px solid var(--line);
+    }
+
+    .form-header {
+      padding: 28px 28px 20px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .wordmark {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--black);
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .wordmark::before {
+      content: '';
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      background: var(--blue);
+    }
+
+    .form-header h1 {
+      font-family: var(--font-head);
+      font-size: 22px;
+      line-height: 1.15;
+      color: var(--black);
+      font-weight: 700;
+      letter-spacing: -0.03em;
+    }
+
+    .form-header h1 em {
+      font-style: normal;
+      color: var(--grey-2);
+      font-weight: 400;
+    }
+
+    .form-body {
+      flex: 1;
+      padding: 0;
+      overflow-y: auto;
+    }
+
+    /* ─── ACCORDION SECTIONS ─────────────────────────────────── */
+    .section-block {
+      border-bottom: 1px solid var(--line);
+    }
+
+    .section-toggle {
+      width: 100%;
+      background: transparent;
+      border: none;
+      color: var(--black);
+      padding: 14px 28px;
+      text-align: left;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-family: var(--font-mono);
+      font-size: 9.5px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      transition: background var(--transition);
+    }
+
+    .section-toggle:hover { background: var(--grey-5); }
+    .section-toggle.active { background: var(--blue); color: var(--white); }
+
+    .toggle-icon {
+      font-size: 16px;
+      line-height: 1;
+      font-family: var(--font-mono);
+      font-weight: 400;
+      transition: transform var(--transition);
+    }
+
+    .section-toggle.active .toggle-icon { transform: rotate(45deg); }
+
+    .section-content {
+      display: none;
+      padding: 20px 28px 24px;
+      border-top: 1px solid var(--line);
+      background: var(--white);
+    }
+
+    .section-content.open { display: block; }
+
+    /* ─── FORM ELEMENTS ──────────────────────────────────────── */
+    .field-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      margin-bottom: 14px;
+    }
+
+    .field:last-child { margin-bottom: 0; }
+
+    .field label {
+      font-family: var(--font-mono);
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--grey-2);
+    }
+
+    .field input,
+    .field textarea,
+    .field select {
+      background: var(--white);
+      border: 1px solid var(--grey-4);
+      border-radius: 0;
+      color: var(--black);
+      font-family: var(--font-body);
+      font-size: 13px;
+      font-weight: 400;
+      padding: 9px 11px;
+      transition: border-color var(--transition);
+      resize: vertical;
+      outline: none;
+      width: 100%;
+      -webkit-appearance: none;
+    }
+
+    .field input::placeholder,
+    .field textarea::placeholder { color: var(--grey-3); font-weight: 300; }
+
+    .field input:focus,
+    .field textarea:focus,
+    .field select:focus {
+      border-color: var(--blue);
+      outline: none;
+    }
+
+    .field select {
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%230a0a0a'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+      padding-right: 30px;
+      cursor: pointer;
+    }
+
+    .field textarea { min-height: 80px; }
+
+    /* ─── DELIVERABLES ────────────────────────────────────────── */
+    .deliverables-list { list-style: none; margin-bottom: 10px; }
+
+    .deliverable-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 9px 12px;
+      background: var(--grey-5);
+      border-left: 2px solid var(--blue);
+      margin-bottom: 4px;
+      font-size: 12.5px;
+      font-weight: 400;
+    }
+
+    .deliverable-item span { flex: 1; }
+
+    .del-remove {
+      background: none;
+      border: none;
+      color: var(--grey-3);
+      cursor: pointer;
+      font-size: 15px;
+      line-height: 1;
+      padding: 0 2px;
+      font-family: var(--font-mono);
+      transition: color var(--transition);
+    }
+
+    .del-remove:hover { color: var(--black); }
+
+    .add-row {
+      display: flex;
+      gap: 0;
+    }
+
+    .add-row input {
+      flex: 1;
+      margin: 0;
+      border-right: none;
+    }
+
+    .btn-add {
+      background: var(--black);
+      border: 1px solid var(--black);
+      color: var(--white);
+      cursor: pointer;
+      font-family: var(--font-mono);
+      font-size: 16px;
+      line-height: 1;
+      padding: 8px 16px;
+      transition: background var(--transition);
+      white-space: nowrap;
+    }
+
+    .btn-add:hover { background: var(--grey-1); }
+
+    /* ─── TIMELINE PHASES ────────────────────────────────────── */
+    .phases-list { margin-bottom: 10px; }
+
+    .phase-item {
+      display: grid;
+      grid-template-columns: 1fr 96px;
+      gap: 0;
+      margin-bottom: 4px;
+      align-items: start;
+    }
+
+    .phase-item input {
+      background: var(--white);
+      border: 1px solid var(--grey-4);
+      border-radius: 0;
+      color: var(--black);
+      font-family: var(--font-body);
+      font-size: 12.5px;
+      padding: 8px 10px;
+      outline: none;
+      width: 100%;
+      transition: border-color var(--transition);
+      -webkit-appearance: none;
+    }
+
+    .phase-item input:first-child { border-right: none; }
+    .phase-item input:focus { border-color: var(--blue); z-index: 1; position: relative; }
+    .phase-item input::placeholder { color: var(--grey-3); font-weight: 300; }
+
+    /* ─── FORM FOOTER ────────────────────────────────────────── */
+    .form-footer {
+      padding: 16px 28px 24px;
+      border-top: 1px solid var(--line);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      background: var(--white);
+    }
+
+    .doc-type-tabs {
+      display: flex;
+      gap: 0;
+      margin-bottom: 4px;
+      border: 1px solid var(--grey-4);
+    }
+
+    .tab-btn {
+      flex: 1;
+      background: transparent;
+      border: none;
+      border-right: 1px solid var(--grey-4);
+      color: var(--grey-2);
+      cursor: pointer;
+      font-family: var(--font-mono);
+      font-size: 8.5px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      padding: 9px 4px;
+      text-transform: uppercase;
+      transition: all var(--transition);
+    }
+
+    .tab-btn:last-child { border-right: none; }
+    .tab-btn:hover { background: var(--grey-5); color: var(--black); }
+
+    .tab-btn.active {
+      background: var(--blue);
+      color: var(--white);
+    }
+
+    .btn-generate {
+      background: var(--blue);
+      border: none;
+      color: var(--white);
+      cursor: pointer;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      padding: 15px 24px;
+      text-transform: uppercase;
+      transition: background var(--transition);
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .btn-generate:hover { background: var(--blue-mid); }
+
+    .btn-generate::after {
+      content: '↗';
+      font-size: 14px;
+    }
+
+    /* ─── RIGHT PANEL (PREVIEW) ──────────────────────────────── */
+    .preview-panel {
+      background: var(--bg);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .preview-toolbar {
+      background: var(--white);
+      border-bottom: 1px solid var(--line);
+      padding: 0 36px;
+      display: flex;
+      align-items: stretch;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      height: 48px;
+    }
+
+    .preview-label {
+      font-family: var(--font-mono);
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--grey-3);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .preview-label::before {
+      content: '';
+      display: inline-block;
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--grey-4);
+    }
+
+    .toolbar-actions { display: flex; gap: 0; align-items: stretch; }
+
+    .btn-download {
+      align-items: center;
+      background: transparent;
+      border: none;
+      border-left: 1px solid var(--line);
+      color: var(--black);
+      cursor: pointer;
+      display: flex;
+      font-family: var(--font-mono);
+      font-size: 9px;
+      font-weight: 700;
+      gap: 8px;
+      letter-spacing: 0.1em;
+      padding: 0 20px;
+      text-transform: uppercase;
+      transition: background var(--transition), color var(--transition);
+      white-space: nowrap;
+    }
+
+    .btn-download:hover { background: var(--blue); color: var(--white); }
+    .btn-download:hover svg { stroke: var(--white); }
+
+    .btn-download svg { width: 11px; height: 11px; stroke: var(--black); transition: stroke var(--transition); }
+
+    /* empty state */
+    .preview-empty {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 60px;
+    }
+
+    .empty-inner {
+      text-align: left;
+      max-width: 360px;
+      border-left: 2px solid var(--blue);
+      padding-left: 24px;
+    }
+
+    .empty-glyph {
+      font-family: var(--font-head);
+      font-size: 64px;
+      line-height: 1;
+      color: var(--grey-4);
+      margin-bottom: 20px;
+      font-weight: 800;
+      letter-spacing: -0.04em;
+      text-transform: uppercase;
+    }
+
+    .empty-inner h2 {
+      font-family: var(--font-head);
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--black);
+      margin-bottom: 10px;
+      text-transform: uppercase;
+      letter-spacing: -0.01em;
+    }
+
+    .empty-inner p {
+      font-size: 13px;
+      color: var(--grey-2);
+      line-height: 1.65;
+      font-weight: 300;
+    }
+
+    /* ─── DOCUMENT WRAPPER ───────────────────────────────────── */
+    .preview-scroll {
+      flex: 1;
+      padding: 40px 36px 72px;
+      display: none;
+      justify-content: center;
+    }
+
+    .preview-scroll.visible { display: flex; }
+
+    /* ─── THE DOCUMENT ───────────────────────────────────────── */
+    #doc-output {
+      background: var(--white);
+      box-shadow: 0 2px 24px rgba(0,0,0,0.08);
+      width: 100%;
+      max-width: 720px;
+      padding: 64px 72px;
+      font-family: var(--font-body);
+      color: var(--black);
+      line-height: 1.6;
+      font-size: 13px;
+    }
+
+    /* doc header */
+    .doc-studio-name {
+      font-family: var(--font-mono);
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--grey-2);
+      margin-bottom: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .doc-type-label {
+      display: inline-block;
+      border: 1px solid var(--blue);
+      color: var(--blue);
+      font-family: var(--font-mono);
+      font-size: 8.5px;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      padding: 5px 10px;
+      margin-bottom: 18px;
+    }
+
+    .doc-title {
+      font-family: var(--font-head);
+      font-size: 40px;
+      line-height: 1.05;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      color: var(--black);
+      margin-bottom: 8px;
+    }
+
+    .doc-subtitle {
+      font-size: 14px;
+      color: var(--grey-2);
+      margin-bottom: 48px;
+      font-weight: 300;
+    }
+
+    .doc-meta-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0;
+      border-top: 2px solid var(--black);
+      border-bottom: 1px solid var(--line);
+      margin-bottom: 52px;
+    }
+
+    .meta-item {
+      padding: 18px 20px 18px 0;
+      border-right: 1px solid var(--line);
+    }
+
+    .meta-item:nth-child(even) {
+      padding-left: 20px;
+      border-right: none;
+    }
+
+    .meta-item:nth-child(n+3) {
+      border-top: 1px solid var(--line);
+    }
+
+    .meta-label {
+      font-family: var(--font-mono);
+      font-size: 8px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--grey-3);
+      margin-bottom: 4px;
+    }
+
+    .meta-value {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--black);
+    }
+
+    /* doc sections */
+    .doc-section { margin-bottom: 44px; }
+
+    .doc-section-header {
+      display: grid;
+      grid-template-columns: 32px 1fr;
+      align-items: baseline;
+      gap: 0;
+      margin-bottom: 18px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--black);
+    }
+
+    .section-num {
+      font-family: var(--font-mono);
+      font-size: 8.5px;
+      font-weight: 700;
+      color: var(--blue);
+      letter-spacing: 0.05em;
+    }
+
+    .section-title {
+      font-family: var(--font-head);
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--black);
+      letter-spacing: -0.01em;
+    }
+
+    .doc-text {
+      color: var(--grey-1);
+      line-height: 1.75;
+      font-size: 13px;
+      font-weight: 300;
+    }
+
+    /* deliverables list */
+    .doc-deliverables {
+      list-style: none;
+      margin-top: 0;
+    }
+
+    .doc-deliverables li {
+      display: flex;
+      align-items: baseline;
+      gap: 14px;
+      padding: 11px 0;
+      border-bottom: 1px solid var(--line);
+      font-size: 13px;
+      color: var(--grey-1);
+      font-weight: 300;
+    }
+
+    .doc-deliverables li:first-child { border-top: 1px solid var(--line); }
+
+    .doc-deliverables li::before {
+      content: "—";
+      color: var(--grey-3);
+      font-family: var(--font-mono);
+      font-size: 10px;
+      flex-shrink: 0;
+    }
+
+    /* timeline */
+    .timeline-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 0;
+    }
+
+    .timeline-table th {
+      font-family: var(--font-mono);
+      font-size: 8px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--grey-3);
+      text-align: left;
+      padding: 0 0 12px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .timeline-table td {
+      padding: 12px 0;
+      border-bottom: 1px solid var(--line);
+      font-size: 13px;
+      color: var(--grey-1);
+      vertical-align: top;
+      font-weight: 300;
+    }
+
+    .timeline-table td:first-child { font-weight: 500; color: var(--black); }
+    .timeline-table td:last-child {
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      color: var(--grey-2);
+      white-space: nowrap;
+    }
+
+    /* pricing */
+    .pricing-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 0;
+    }
+
+    .pricing-table th {
+      font-family: var(--font-mono);
+      font-size: 8px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--grey-3);
+      text-align: left;
+      padding: 0 0 12px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .pricing-table th:last-child { text-align: right; }
+
+    .pricing-table td {
+      padding: 12px 0;
+      border-bottom: 1px solid var(--line);
+      font-size: 13px;
+      color: var(--grey-1);
+      font-weight: 300;
+    }
+
+    .pricing-table td:last-child {
+      text-align: right;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--black);
+      font-weight: 700;
+    }
+
+    .pricing-total-row td {
+      border-bottom: none;
+      padding-top: 16px;
+      font-weight: 600;
+      font-size: 13.5px;
+      color: var(--black);
+      border-top: 2px solid var(--black);
+    }
+
+    .pricing-total-row td:last-child {
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    /* terms */
+    .terms-list {
+      list-style: none;
+      counter-reset: terms;
+    }
+
+    .terms-list li {
+      counter-increment: terms;
+      display: grid;
+      grid-template-columns: 28px 1fr;
+      gap: 0;
+      padding: 11px 0;
+      border-bottom: 1px solid var(--line);
+      font-size: 12.5px;
+      color: var(--grey-2);
+      line-height: 1.65;
+      font-weight: 300;
+    }
+
+    .terms-list li:first-child { border-top: 1px solid var(--line); }
+
+    .terms-list li::before {
+      content: counter(terms, decimal-leading-zero);
+      font-family: var(--font-mono);
+      font-size: 8px;
+      font-weight: 700;
+      color: var(--blue);
+      padding-top: 3px;
+    }
+
+    /* signature */
+    .signature-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0;
+      margin-top: 24px;
+      border: 1px solid var(--line);
+    }
+
+    .sig-block {
+      padding: 24px;
+    }
+
+    .sig-block:first-child {
+      border-right: 1px solid var(--line);
+    }
+
+    .sig-party {
+      font-family: var(--font-mono);
+      font-size: 8px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--grey-3);
+      margin-bottom: 28px;
+    }
+
+    .sig-line {
+      border-bottom: 1px solid var(--black);
+      margin-bottom: 8px;
+      height: 36px;
+      display: flex;
+      align-items: flex-end;
+      padding-bottom: 4px;
+    }
+
+    .sig-typed {
+      font-family: var(--font-head);
+      font-size: 20px;
+      color: var(--black);
+      font-weight: 800;
+      letter-spacing: -0.02em;
+    }
+
+    .sig-field-label {
+      font-family: var(--font-mono);
+      font-size: 8px;
+      color: var(--grey-3);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      font-weight: 700;
+    }
+
+    .sig-date {
+      margin-top: 16px;
+      border-top: 1px solid var(--line);
+      padding-top: 10px;
+      font-size: 12.5px;
+      color: var(--grey-2);
+      font-weight: 300;
+    }
+
+    /* doc footer */
+    .doc-footer {
+      margin-top: 52px;
+      padding-top: 16px;
+      border-top: 1px solid var(--line);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .doc-footer-studio {
+      font-family: var(--font-mono);
+      font-size: 8.5px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--grey-3);
+    }
+
+    .doc-footer-page {
+      font-family: var(--font-mono);
+      font-size: 8.5px;
+      color: var(--grey-3);
+    }
+
+    /* ─── LOADING OVERLAY ────────────────────────────────────── */
+    #loading-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(10,10,10,0.9);
+      z-index: 1000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    #loading-overlay.visible { display: flex; }
+
+    .spinner {
+      width: 28px; height: 28px;
+      border: 1.5px solid rgba(255,255,255,0.15);
+      border-top-color: var(--white);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .loading-text {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.4);
+    }
+
+    /* ─── NAMED CLAUSES (doc output) ────────────────────────── */
+    .terms-category-label {
+      font-family: var(--font-mono);
+      font-size: 8px;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--blue);
+      margin-bottom: 12px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid var(--blue-light);
+    }
+
+    .terms-named-clause {
+      margin-bottom: 16px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .terms-named-clause:last-child {
+      border-bottom: none;
+      margin-bottom: 0;
+      padding-bottom: 0;
+    }
+
+    .terms-clause-header {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      margin-bottom: 6px;
+    }
+
+    .terms-clause-num {
+      font-family: var(--font-mono);
+      font-size: 8px;
+      font-weight: 700;
+      color: var(--blue);
+      flex-shrink: 0;
+    }
+
+    .terms-clause-name {
+      font-family: var(--font-head);
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--black);
+      letter-spacing: -0.01em;
+    }
+
+    .terms-clause-body {
+      padding-left: 22px;
+      font-size: 12px;
+      line-height: 1.7;
+    }
+
+    /* ─── PROTECTION TOGGLES ─────────────────────────────────── */
+    .toggle-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .clause-toggle {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 9px 11px;
+      border: 1px solid var(--grey-4);
+      cursor: pointer;
+      transition: background var(--transition), border-color var(--transition);
+      background: var(--white);
+      user-select: none;
+    }
+
+    .clause-toggle:hover { background: var(--grey-5); }
+
+    .clause-toggle.on {
+      background: var(--blue-light);
+      border-color: var(--blue);
+    }
+
+    .clause-check {
+      width: 14px;
+      height: 14px;
+      border: 1.5px solid var(--grey-3);
+      flex-shrink: 0;
+      margin-top: 1px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background var(--transition), border-color var(--transition);
+    }
+
+    .clause-toggle.on .clause-check {
+      background: var(--blue);
+      border-color: var(--blue);
+    }
+
+    .clause-check::after {
+      content: '';
+      display: none;
+      width: 8px;
+      height: 5px;
+      border-left: 1.5px solid white;
+      border-bottom: 1.5px solid white;
+      transform: rotate(-45deg) translateY(-1px);
+    }
+
+    .clause-toggle.on .clause-check::after { display: block; }
+
+    .clause-info {}
+
+    .clause-name {
+      font-family: var(--font-mono);
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      color: var(--black);
+      text-transform: uppercase;
+      margin-bottom: 2px;
+    }
+
+    .clause-desc {
+      font-size: 11px;
+      color: var(--grey-2);
+      line-height: 1.5;
+      font-weight: 300;
+    }
+
+    /* custom fields that expand on toggle */
+    .custom-field-row {
+      margin-top: 4px;
+      margin-bottom: 8px;
+      animation: fadeIn 150ms ease;
+    }
+
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+
+    /* ─── SCROLLBAR ──────────────────────────────────────────── */
+    .form-body::-webkit-scrollbar { width: 3px; }
+    .form-body::-webkit-scrollbar-track { background: transparent; }
+    .form-body::-webkit-scrollbar-thumb { background: var(--grey-4); }
+
+    /* ─── RESPONSIVE ─────────────────────────────────────────── */
+    @media (max-width: 960px) {
+      .app-shell {
+        grid-template-columns: 1fr;
+        height: auto;
+      }
+      .form-panel {
+        position: static;
+        height: auto;
+        max-height: none;
+      }
+      .preview-panel { min-height: 60vh; }
+      #doc-output { padding: 40px 28px; }
+      .signature-grid { grid-template-columns: 1fr; }
+      .sig-block:first-child { border-right: none; border-bottom: 1px solid var(--line); }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Loading Overlay -->
+<div id="loading-overlay">
+  <div class="spinner"></div>
+  <p class="loading-text">Generating PDF…</p>
+</div>
+
+<div class="app-shell">
+
+  <!-- ─── LEFT: FORM PANEL ──────────────────────────────────── -->
+  <aside class="form-panel">
+    <div class="form-header">
+      <div class="wordmark">Barter Docs</div>
+      <h1>Document<br/><em>Builder</em></h1>
+    </div>
+
+    <div class="form-body">
+
+      <!-- 01 STUDIO INFO -->
+      <div class="section-block">
+        <button class="section-toggle active" onclick="toggleSection(this)">
+          <span>01 — Studio Info</span>
+          <span class="toggle-icon">+</span>
+        </button>
+        <div class="section-content open">
+          <div class="field">
+            <label>Studio / Agency Name</label>
+            <input type="text" id="studio-name" placeholder="Barter Studio" oninput="liveUpdate()" />
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label>Studio Email</label>
+              <input type="email" id="studio-email" placeholder="hello@barterstudio.co" oninput="liveUpdate()" />
+            </div>
+            <div class="field">
+              <label>Studio Location</label>
+              <input type="text" id="studio-location" placeholder="New York, NY" oninput="liveUpdate()" />
+            </div>
+          </div>
+          <div class="field">
+            <label>Studio Website</label>
+            <input type="text" id="studio-website" placeholder="barterstudio.co" oninput="liveUpdate()" />
+          </div>
+        </div>
+      </div>
+
+      <!-- 02 CLIENT INFO -->
+      <div class="section-block">
+        <button class="section-toggle active" onclick="toggleSection(this)">
+          <span>02 — Client Info</span>
+          <span class="toggle-icon">+</span>
+        </button>
+        <div class="section-content open">
+          <div class="field-row">
+            <div class="field">
+              <label>Client Name</label>
+              <input type="text" id="client-name" placeholder="Jane Doe" oninput="liveUpdate()" />
+            </div>
+            <div class="field">
+              <label>Company</label>
+              <input type="text" id="client-company" placeholder="Acme Corp" oninput="liveUpdate()" />
+            </div>
+          </div>
+          <div class="field">
+            <label>Client Email</label>
+            <input type="email" id="client-email" placeholder="jane@acmecorp.com" oninput="liveUpdate()" />
+          </div>
+        </div>
+      </div>
+
+      <!-- 03 PROJECT -->
+      <div class="section-block">
+        <button class="section-toggle active" onclick="toggleSection(this)">
+          <span>03 — Project Details</span>
+          <span class="toggle-icon">+</span>
+        </button>
+        <div class="section-content open">
+          <div class="field">
+            <label>Project Name</label>
+            <input type="text" id="project-name" placeholder="Brand Identity System" oninput="liveUpdate()" />
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label>Proposal Date</label>
+              <input type="date" id="proposal-date" oninput="liveUpdate()" />
+            </div>
+            <div class="field">
+              <label>Project Start</label>
+              <input type="date" id="project-start" oninput="liveUpdate()" />
+            </div>
+          </div>
+          <div class="field">
+            <label>Project Overview</label>
+            <textarea id="project-overview" placeholder="Brief description of the project goals, context, and why this work matters…" oninput="liveUpdate()"></textarea>
+          </div>
+          <div class="field">
+            <label>Scope of Work</label>
+            <textarea id="scope-of-work" placeholder="Define what's included in this engagement…" oninput="liveUpdate()"></textarea>
+          </div>
+        </div>
+      </div>
+
+      <!-- 04 DELIVERABLES -->
+      <div class="section-block">
+        <button class="section-toggle" onclick="toggleSection(this)">
+          <span>04 — Deliverables</span>
+          <span class="toggle-icon">+</span>
+        </button>
+        <div class="section-content">
+          <ul class="deliverables-list" id="deliverables-list"></ul>
+          <div class="add-row">
+            <input type="text" id="new-deliverable" placeholder="e.g. Brand Guidelines PDF" />
+            <button class="btn-add" onclick="addDeliverable()">+</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 05 TIMELINE -->
+      <div class="section-block">
+        <button class="section-toggle" onclick="toggleSection(this)">
+          <span>05 — Timeline</span>
+          <span class="toggle-icon">+</span>
+        </button>
+        <div class="section-content">
+          <div class="phases-list" id="phases-list">
+            <!-- phases added dynamically -->
+          </div>
+          <button class="btn-add" style="width:100%; font-size:12px; padding:10px;" onclick="addPhase()">+ Add Phase</button>
+        </div>
+      </div>
+
+      <!-- 06 PRICING -->
+      <div class="section-block">
+        <button class="section-toggle" onclick="toggleSection(this)">
+          <span>06 — Pricing</span>
+          <span class="toggle-icon">+</span>
+        </button>
+        <div class="section-content">
+          <div id="line-items-list"></div>
+          <button class="btn-add" style="width:100%; font-size:12px; padding:10px; margin-bottom:14px;" onclick="addLineItem()">+ Add Line Item</button>
+          <div class="field-row">
+            <div class="field">
+              <label>Currency</label>
+              <select id="currency" onchange="liveUpdate()">
+                <option value="USD">USD ($)</option>
+                <option value="EUR">EUR (€)</option>
+                <option value="GBP">GBP (£)</option>
+                <option value="CAD">CAD ($)</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Rush Fee (%)</label>
+              <select id="rush-fee" onchange="liveUpdate()">
+                <option value="">No rush fee</option>
+                <option value="15">15%</option>
+                <option value="25" selected>25%</option>
+                <option value="50">50%</option>
+              </select>
+            </div>
+          </div>
+          <div class="field">
+            <label>Pricing Notes</label>
+            <textarea id="pricing-notes" placeholder="Any additional notes about pricing, retainers, expenses, etc." oninput="liveUpdate()"></textarea>
+          </div>
+        </div>
+      </div>
+
+      <!-- 07 PROTECTIONS & TERMS -->
+      <div class="section-block">
+        <button class="section-toggle" onclick="toggleSection(this)">
+          <span>07 — Scope Details</span>
+          <span class="toggle-icon">+</span>
+        </button>
+        <div class="section-content">
+          <div class="field">
+            <label>Scope Exclusions</label>
+            <textarea id="scope-exclusions" placeholder="e.g. Excludes social media templates or motion graphics unless added via change order." oninput="liveUpdate()"></textarea>
+          </div>
+          <div class="field">
+            <label>Assumptions</label>
+            <textarea id="scope-assumptions" placeholder="e.g. Client supplies all brand research, assets, and copy prior to kickoff." oninput="liveUpdate()"></textarea>
+          </div>
+          <div class="field">
+            <label>Deliverable File Formats</label>
+            <input type="text" id="file-formats" placeholder="e.g. AI, EPS, PDF, PNG (300dpi), SVG" oninput="liveUpdate()" />
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label>Revision Rounds Included</label>
+              <select id="revision-rounds" onchange="liveUpdate()">
+                <option value="1">1 round</option>
+                <option value="2" selected>2 rounds</option>
+                <option value="3">3 rounds</option>
+                <option value="unlimited">Unlimited</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Overage Rate ($/hr)</label>
+              <input type="number" id="revision-rate" placeholder="150" oninput="liveUpdate()" />
+            </div>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label>Client Feedback Window (days)</label>
+              <input type="number" id="feedback-days" placeholder="5" oninput="liveUpdate()" />
+            </div>
+            <div class="field">
+              <label>Comms Channel</label>
+              <input type="text" id="comms-channel" placeholder="Email + Notion" oninput="liveUpdate()" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section-block">
+        <button class="section-toggle" onclick="toggleSection(this)">
+          <span>08 — Protections</span>
+          <span class="toggle-icon">+</span>
+        </button>
+        <div class="section-content">
+          <p style="font-family:var(--font-mono);font-size:9px;color:var(--grey-2);letter-spacing:0.05em;margin-bottom:16px;line-height:1.7;">Toggle clauses to include. Each generates a full paragraph in your document.</p>
+
+          <div style="margin-bottom:16px;">
+            <div style="font-family:var(--font-mono);font-size:8.5px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--grey-3);margin-bottom:8px;">Legal Protections</div>
+            <div id="protection-toggles"></div>
+          </div>
+
+          <div style="margin-bottom:16px;">
+            <div style="font-family:var(--font-mono);font-size:8.5px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--grey-3);margin-bottom:8px;">Best Practices</div>
+            <div id="bestpractice-toggles"></div>
+          </div>
+
+          <div class="field-row" style="margin-top:14px;">
+            <div class="field">
+              <label>Governing State</label>
+              <input type="text" id="governing-law" placeholder="New Jersey" oninput="liveUpdate()" />
+            </div>
+            <div class="field">
+              <label>Kill Fee %</label>
+              <select id="kill-fee-pct" onchange="liveUpdate()">
+                <option value="20">20%</option>
+                <option value="25">25%</option>
+                <option value="30" selected>30%</option>
+                <option value="50">50%</option>
+              </select>
+            </div>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label>Late Fee (% / month)</label>
+              <input type="number" id="late-fee" placeholder="1.5" step="0.5" oninput="liveUpdate()" />
+            </div>
+            <div class="field">
+              <label>Invoice Payment (days)</label>
+              <select id="invoice-days" onchange="liveUpdate()">
+                <option value="7">Net 7</option>
+                <option value="15" selected>Net 15</option>
+                <option value="30">Net 30</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section-block">
+        <button class="section-toggle" onclick="toggleSection(this)">
+          <span>09 — Custom Terms</span>
+          <span class="toggle-icon">+</span>
+        </button>
+        <div class="section-content">
+          <div class="field">
+            <label>Additional Terms (one per line)</label>
+            <textarea id="custom-terms" style="min-height:90px;" placeholder="Any additional terms not covered above…" oninput="liveUpdate()"></textarea>
+          </div>
+        </div>
+      </div>
+
+      <!-- 10 SIGNATURE -->
+      <div class="section-block">
+        <button class="section-toggle" onclick="toggleSection(this)">
+          <span>10 — Signature</span>
+          <span class="toggle-icon">+</span>
+        </button>
+        <div class="section-content">
+          <div class="field">
+            <label>Studio Signatory Name</label>
+            <input type="text" id="studio-signatory" placeholder="Your Name" oninput="liveUpdate()" />
+          </div>
+          <div class="field">
+            <label>Studio Signatory Title</label>
+            <input type="text" id="studio-signatory-title" placeholder="Founder, Creative Director" oninput="liveUpdate()" />
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="form-footer">
+      <div>
+        <p style="font-family:var(--font-mono);font-size:9px;letter-spacing:0.1em;text-transform:uppercase;color:var(--ink-4);margin-bottom:8px;">Document Type</p>
+        <div class="doc-type-tabs">
+          <button class="tab-btn active" data-type="proposal" onclick="setDocType(this)">Proposal</button>
+          <button class="tab-btn" data-type="sow" onclick="setDocType(this)">SOW</button>
+          <button class="tab-btn" data-type="agreement" onclick="setDocType(this)">Agreement</button>
+        </div>
+      </div>
+      <button class="btn-generate" onclick="generateDoc()">
+        Generate Document
+      </button>
+    </div>
+  </aside>
+
+  <!-- ─── RIGHT: PREVIEW PANEL ─────────────────────────────── -->
+  <main class="preview-panel">
+    <div class="preview-toolbar">
+      <span class="preview-label">Live Preview</span>
+      <div class="toolbar-actions">
+        <button class="btn-download" onclick="downloadPDF()">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M8 1v9M4 7l4 4 4-4M2 13h12"/>
+          </svg>
+          Download PDF
+        </button>
+      </div>
+    </div>
+
+    <!-- Empty state -->
+    <div class="preview-empty" id="empty-state">
+      <div class="empty-inner">
+        <div class="empty-glyph">DOC</div>
+        <h2>Fill the form.<br/>Get the doc.</h2>
+        <p>Complete the fields on the left, select your document type, and click <em>Generate Document</em> to see a live preview here.</p>
+      </div>
+    </div>
+
+    <!-- Document preview -->
+    <div class="preview-scroll" id="preview-scroll">
+      <div id="doc-output">
+        <!-- Rendered by JS -->
+      </div>
+    </div>
+  </main>
+
+</div>
+
+<script>
+// ─── STATE ────────────────────────────────────────────────────
+let deliverables = [];
+let phases = [
+  { name: 'Discovery & Strategy', duration: '1 week' },
+  { name: 'Concept Development', duration: '2 weeks' },
+  { name: 'Refinement', duration: '1 week' },
+  { name: 'Final Delivery', duration: '3 days' },
+];
+let lineItems = [
+  { description: 'Brand Strategy & Positioning', amount: 2500 },
+  { description: 'Visual Identity System', amount: 6000 },
+  { description: 'Brand Guidelines Document', amount: 1500 },
+];
+let currentDocType = 'proposal';
+let docGenerated = false;
+
+// ─── PROTECTION CLAUSES ───────────────────────────────────────
+// Each clause: id, name, desc, on (default), getText(state) → string(s)
+const PROTECTIONS = [
+  {
+    id: 'ip-ownership',
+    name: 'IP Ownership',
+    desc: 'Studio retains rights until full payment; client receives limited license.',
+    on: true,
+    getText: () => [
+      'Intellectual property rights in all work product remain with the studio until receipt of full payment. Upon payment, the studio grants client an exclusive, perpetual license to use the final deliverables for the agreed purpose. The studio retains the right to display completed work in its portfolio and marketing materials unless otherwise agreed in writing.',
+      'No rights, title, or license to any deliverable are transferred to the client until all outstanding invoices are paid in full. Work resumes only after overdue payments are settled.',
+    ],
+  },
+  {
+    id: 'scope-creep',
+    name: 'Scope Creep / Change Orders',
+    desc: 'All changes outside the agreed scope require a signed addendum.',
+    on: true,
+    getText: () => [
+      'Any work outside the defined scope of this agreement constitutes a change order. Change orders must be submitted in writing and signed by both parties before additional work commences. Each change order will include a revised timeline and fee estimate. Verbal approvals do not constitute authorization; only written approvals advance milestones.',
+    ],
+  },
+  {
+    id: 'payment-terms',
+    name: 'Payment & Late Fees',
+    desc: 'Net 15 invoicing; 1.5% monthly late fee; work pauses on overdue invoices.',
+    on: true,
+    getText: (s) => {
+      const terms = s['payment-terms-select'] || '50/50';
+      const map = {
+        '50/50': '50% of the total project fee is due upon signing this agreement. The remaining 50% is due upon final delivery.',
+        '100-upfront': '100% of the total project fee is due upon signing this agreement before any work commences.',
+        '3-installments': 'Payments are due in three equal installments: (1) at signing, (2) upon delivery of initial concepts, and (3) upon final delivery.',
+        'milestone': '40% deposit is due upon signing. 30% is due upon approval of initial concepts. The remaining 30% is due upon final delivery.',
+        'net15': 'All invoices are due within 15 days of issuance.',
+      };
+      return [
+        map[terms] || map['50/50'],
+        'Invoices unpaid after 15 days accrue a late fee of 1.5% per month on the outstanding balance. The studio reserves the right to pause all work on overdue accounts until payment is received.',
+      ];
+    },
+    customField: {
+      id: 'payment-terms-select',
+      label: 'Payment Structure',
+      type: 'select',
+      options: [
+        { value: '50/50', label: '50% deposit / 50% on delivery' },
+        { value: '100-upfront', label: '100% upfront' },
+        { value: '3-installments', label: '3 equal installments' },
+        { value: 'milestone', label: 'Milestone-based (40/30/30)' },
+        { value: 'net15', label: 'Net 15 days' },
+      ],
+    },
+  },
+  {
+    id: 'termination',
+    name: 'Termination & Kill Fee',
+    desc: '14-day written notice required; kill fee of 20–50% applies.',
+    on: true,
+    getText: (s) => {
+      const pct = s['kill-fee-pct'] || '25';
+      return [
+        `Either party may terminate this agreement with 14 days written notice. Upon termination, the client is invoiced for all work completed to date at the prorated project rate. In addition, a kill fee of ${pct}% of the remaining unpaid balance is due to compensate for reserved schedule capacity and opportunity cost. No deliverables are transferred until all termination fees are paid.`,
+      ];
+    },
+    customField: {
+      id: 'kill-fee-pct',
+      label: 'Kill Fee Percentage',
+      type: 'select',
+      options: [
+        { value: '20', label: '20%' },
+        { value: '25', label: '25%' },
+        { value: '33', label: '33%' },
+        { value: '50', label: '50%' },
+      ],
+    },
+  },
+  {
+    id: 'indemnification',
+    name: 'Indemnification',
+    desc: 'Mutual indemnification; liability capped at total project fees.',
+    on: true,
+    getText: () => [
+      'Each party agrees to indemnify, defend, and hold harmless the other from any third-party claims arising from its own negligence, willful misconduct, or breach of this agreement. The studio\'s total liability under this agreement shall not exceed the total fees paid by the client in the 12 months preceding the claim.',
+    ],
+  },
+  {
+    id: 'warranties',
+    name: 'Warranties',
+    desc: 'Studio warrants original work; client warrants rights to all inputs.',
+    on: true,
+    getText: () => [
+      'The studio warrants that all deliverables are original work and, to the best of its knowledge, do not infringe the intellectual property rights of any third party. The client warrants that all materials, content, and assets supplied to the studio are owned by the client or properly licensed, and that the client has full authority to authorize their use.',
+    ],
+  },
+  {
+    id: 'governing-law',
+    name: 'Governing Law',
+    desc: 'Disputes governed by the studio\'s jurisdiction.',
+    on: true,
+    getText: (s) => {
+      const loc = s['governing-law-location'] || 'New Jersey';
+      return [
+        `This agreement shall be governed by and construed in accordance with the laws of the State of ${loc}, without regard to its conflict of law provisions. Any disputes arising under this agreement shall be subject to the exclusive jurisdiction of the courts located in ${loc}.`,
+      ];
+    },
+    customField: {
+      id: 'governing-law-location',
+      label: 'Governing State / Jurisdiction',
+      type: 'text',
+      placeholder: 'New Jersey',
+    },
+  },
+  {
+    id: 'force-majeure',
+    name: 'Force Majeure',
+    desc: 'Excuses delays from illness, natural disaster, or unforeseen events.',
+    on: false,
+    getText: () => [
+      'Neither party shall be liable for delays or failure to perform resulting from circumstances beyond their reasonable control, including illness, natural disaster, government action, power outages, or other force majeure events. In such cases, timelines will be extended by the duration of the disruption, with prompt written notice provided to the other party.',
+    ],
+  },
+  {
+    id: 'confidentiality',
+    name: 'Confidentiality (NDA)',
+    desc: 'Mutual NDA covering brand strategy and sensitive client information.',
+    on: false,
+    getText: () => [
+      'Both parties agree to keep confidential all non-public business information, brand strategies, financial data, and trade secrets disclosed during the course of this engagement. This obligation survives termination of this agreement for a period of two (2) years. Neither party shall disclose confidential information to third parties without prior written consent, except as required by law.',
+    ],
+  },
+];
+
+// ─── BEST PRACTICE CLAUSES ────────────────────────────────────
+const BEST_PRACTICES = [
+  {
+    id: 'scope-exclusions',
+    name: 'Scope Exclusions',
+    desc: 'Explicitly list what is NOT included to prevent assumptions.',
+    on: true,
+    getText: (s) => {
+      const excl = s['scope-exclusions-text'];
+      if (!excl) return [];
+      return [`The following are explicitly excluded from this scope of work and may be added via a signed change order: ${excl}.`];
+    },
+    customField: {
+      id: 'scope-exclusions-text',
+      label: 'List Exclusions (comma-separated)',
+      type: 'text',
+      placeholder: 'Social media templates, motion graphics, copywriting, photography',
+    },
+  },
+  {
+    id: 'revision-limits',
+    name: 'Revision Limits',
+    desc: 'Cap included revisions; set rate for additional rounds.',
+    on: true,
+    getText: (s) => {
+      const rounds = s['revision-rounds'] || '2';
+      const rate = s['revision-rate'] || '150';
+      return [`This agreement includes ${rounds} rounds of design feedback per deliverable phase. A "round" is defined as a consolidated set of written comments submitted within the feedback window. Additional revision rounds beyond the included ${rounds} will be billed at $${rate}/hour, invoiced in 30-minute increments.`];
+    },
+    customField: null, // rendered manually below
+    customFields: [
+      { id: 'revision-rounds', label: 'Included Revision Rounds', type: 'select',
+        options: [{ value: '1', label: '1 round' }, { value: '2', label: '2 rounds' }, { value: '3', label: '3 rounds' }] },
+      { id: 'revision-rate', label: 'Additional Revisions Rate ($/hr)', type: 'text', placeholder: '150' },
+    ],
+  },
+  {
+    id: 'feedback-window',
+    name: 'Feedback Timelines',
+    desc: 'Client must respond within a set window or milestone advances.',
+    on: true,
+    getText: (s) => {
+      const days = s['feedback-days'] || '5';
+      return [`Client agrees to provide consolidated written feedback within ${days} business days of each milestone delivery. If feedback is not received within ${days} business days, the studio reserves the right to advance to the next milestone and adjust the project timeline accordingly. Delays caused by late feedback are not the studio's responsibility.`];
+    },
+    customField: {
+      id: 'feedback-days',
+      label: 'Feedback Window (business days)',
+      type: 'select',
+      options: [
+        { value: '3', label: '3 business days' },
+        { value: '5', label: '5 business days' },
+        { value: '7', label: '7 business days' },
+        { value: '10', label: '10 business days' },
+      ],
+    },
+  },
+  {
+    id: 'assumptions',
+    name: 'Project Assumptions',
+    desc: 'State upfront what the studio relies on from the client.',
+    on: true,
+    getText: (s) => {
+      const custom = s['assumptions-text'];
+      const base = 'This proposal is based on the following assumptions: (1) Client supplies all necessary brand research, existing assets, and content briefs prior to project kickoff; (2) A single primary point of contact is designated on the client side with authority to approve deliverables; (3) Project scope and timeline are contingent on timely client input as outlined above.';
+      if (custom) return [base + ' Additional assumptions: ' + custom + '.'];
+      return [base];
+    },
+    customField: {
+      id: 'assumptions-text',
+      label: 'Additional Assumptions (optional)',
+      type: 'text',
+      placeholder: 'e.g., Brand tone of voice document is provided at kickoff',
+    },
+  },
+  {
+    id: 'file-formats',
+    name: 'File Format Specifications',
+    desc: 'Define exactly which file formats will be delivered.',
+    on: false,
+    getText: (s) => {
+      const formats = s['file-formats-text'] || 'Adobe Illustrator (.ai), EPS, PDF, and PNG (transparent)';
+      return [`Final deliverables will be provided in the following formats: ${formats}. Source files are included in the final handoff package upon receipt of full payment. Any additional file format conversions requested after delivery will be billed at the studio's standard rate.`];
+    },
+    customField: {
+      id: 'file-formats-text',
+      label: 'Deliverable Formats',
+      type: 'text',
+      placeholder: 'Adobe Illustrator (.ai), EPS, PDF, PNG (transparent)',
+    },
+  },
+  {
+    id: 'comms-protocol',
+    name: 'Communication Protocol',
+    desc: 'Set expectations for how and when client can reach the studio.',
+    on: false,
+    getText: (s) => {
+      const method = s['comms-method'] || 'email';
+      const cadence = s['comms-cadence'] || 'weekly';
+      const methodLabel = { email: 'email', slack: 'Slack', notion: 'Notion', email_notion: 'email and Notion' }[method] || method;
+      const cadenceLabel = { weekly: 'weekly', biweekly: 'bi-weekly', milestone: 'at each project milestone' }[cadence] || cadence;
+      return [`Primary communication for this project will be conducted via ${methodLabel}. The studio will schedule ${cadenceLabel} check-ins to review progress and align on next steps. Requests submitted outside of agreed channels or outside of business hours (Mon–Fri, 9am–6pm) will be addressed on the next business day. Phone or unscheduled calls require advance notice.`];
+    },
+    customFields: [
+      { id: 'comms-method', label: 'Primary Channel', type: 'select',
+        options: [{ value: 'email', label: 'Email' }, { value: 'slack', label: 'Slack' }, { value: 'notion', label: 'Notion' }, { value: 'email_notion', label: 'Email + Notion' }] },
+      { id: 'comms-cadence', label: 'Check-in Cadence', type: 'select',
+        options: [{ value: 'weekly', label: 'Weekly' }, { value: 'biweekly', label: 'Bi-weekly' }, { value: 'milestone', label: 'At each milestone' }] },
+    ],
+  },
+  {
+    id: 'written-approvals',
+    name: 'Written Milestone Approvals',
+    desc: 'Require written sign-off at each stage before advancing.',
+    on: true,
+    getText: () => [
+      'Each project milestone requires written approval from the designated client contact before the studio proceeds to the next phase. Verbal approvals, informal messages, or silence do not constitute approval. Any work continued without written approval is at the client\'s own risk. Written approvals may be provided via email or the designated project management tool.',
+    ],
+  },
+];
+
+// Combined state for custom field values
+let clauseFieldValues = {};
+
+// Active clause IDs
+let activeProtections = new Set(PROTECTIONS.filter(c => c.on).map(c => c.id));
+let activeBestPractices = new Set(BEST_PRACTICES.filter(c => c.on).map(c => c.id));
+
+// ─── INIT ─────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById('proposal-date').value = today;
+  const startDate = new Date();
+  startDate.setDate(startDate.getDate() + 14);
+  document.getElementById('project-start').value = startDate.toISOString().split('T')[0];
+
+  renderPhases();
+  renderLineItems();
+  renderClauseToggles();
+
+  document.getElementById('new-deliverable').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') addDeliverable();
+  });
+});
+
+// ─── CLAUSE TOGGLES ──────────────────────────────────────────
+function renderClauseToggles() {
+  renderToggleGroup('protection-toggles', PROTECTIONS, activeProtections);
+  renderToggleGroup('bestpractice-toggles', BEST_PRACTICES, activeBestPractices);
+  renderCustomFields();
+}
+
+function renderToggleGroup(containerId, clauses, activeSet) {
+  const container = document.getElementById(containerId);
+  container.innerHTML = clauses.map(c => `
+    <div class="clause-toggle ${activeSet.has(c.id) ? 'on' : ''}" onclick="toggleClause('${c.id}', '${containerId}')">
+      <div class="clause-check"></div>
+      <div class="clause-info">
+        <div class="clause-name">${c.name}</div>
+        <div class="clause-desc">${c.desc}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function toggleClause(id, containerId) {
+  const isProtection = containerId === 'protection-toggles';
+  const activeSet = isProtection ? activeProtections : activeBestPractices;
+
+  if (activeSet.has(id)) {
+    activeSet.delete(id);
+  } else {
+    activeSet.add(id);
+  }
+  // Re-render just that toggle's visual state
+  const clauses = isProtection ? PROTECTIONS : BEST_PRACTICES;
+  renderToggleGroup(containerId, clauses, activeSet);
+  renderCustomFields();
+  if (docGenerated) liveUpdate();
+}
+
+function renderCustomFields() {
+  const area = document.getElementById('custom-fields-area');
+  let html = '';
+
+  const allActive = [
+    ...PROTECTIONS.filter(c => activeProtections.has(c.id)),
+    ...BEST_PRACTICES.filter(c => activeBestPractices.has(c.id)),
+  ];
+
+  for (const clause of allActive) {
+    const fields = clause.customFields || (clause.customField ? [clause.customField] : []);
+    if (!fields.length) continue;
+
+    html += `<div class="custom-field-row">`;
+    html += `<div style="font-family:var(--font-mono);font-size:8.5px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--blue);margin-bottom:6px;">${clause.name}</div>`;
+
+    if (fields.length === 2) {
+      html += `<div class="field-row">`;
+    }
+
+    for (const f of fields) {
+      const curVal = clauseFieldValues[f.id] || '';
+      html += `<div class="field">`;
+      html += `<label>${f.label}</label>`;
+      if (f.type === 'select') {
+        html += `<select id="cf-${f.id}" onchange="clauseFieldValues['${f.id}']=this.value;if(docGenerated)liveUpdate();">`;
+        for (const opt of f.options) {
+          html += `<option value="${opt.value}" ${curVal === opt.value ? 'selected' : ''}>${opt.label}</option>`;
+        }
+        html += `</select>`;
+      } else {
+        html += `<input type="text" id="cf-${f.id}" value="${escHtml(curVal)}" placeholder="${escHtml(f.placeholder||'')}" oninput="clauseFieldValues['${f.id}']=this.value;if(docGenerated)liveUpdate();" />`;
+      }
+      html += `</div>`;
+    }
+
+    if (fields.length === 2) {
+      html += `</div>`;
+    }
+
+    html += `</div>`;
+  }
+
+  area.innerHTML = html;
+
+  // Seed defaults into clauseFieldValues if not yet set
+  for (const clause of [...PROTECTIONS, ...BEST_PRACTICES]) {
+    const fields = clause.customFields || (clause.customField ? [clause.customField] : []);
+    for (const f of fields) {
+      if (!(f.id in clauseFieldValues)) {
+        if (f.type === 'select' && f.options?.length) {
+          clauseFieldValues[f.id] = f.options[0].value;
+        } else {
+          clauseFieldValues[f.id] = f.placeholder || '';
+        }
+      }
+    }
+  }
+}
+
+// Collect all active clause text for the document
+function getActiveClauses() {
+  const lines = [];
+
+  for (const c of PROTECTIONS) {
+    if (!activeProtections.has(c.id)) continue;
+    const texts = typeof c.getText === 'function' ? c.getText(clauseFieldValues) : [];
+    lines.push(...texts.map(t => ({ category: 'protection', name: c.name, text: t })));
+  }
+
+  for (const c of BEST_PRACTICES) {
+    if (!activeBestPractices.has(c.id)) continue;
+    const texts = typeof c.getText === 'function' ? c.getText(clauseFieldValues) : [];
+    lines.push(...texts.map(t => ({ category: 'practice', name: c.name, text: t })));
+  }
+
+  return lines;
+}
+
+// ─── ACCORDION ────────────────────────────────────────────────
+function toggleSection(btn) {
+  const content = btn.nextElementSibling;
+  btn.classList.toggle('active');
+  content.classList.toggle('open');
+}
+
+// ─── DOC TYPE ─────────────────────────────────────────────────
+function setDocType(btn) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  currentDocType = btn.dataset.type;
+  if (docGenerated) liveUpdate();
+}
+
+// ─── DELIVERABLES ─────────────────────────────────────────────
+function addDeliverable() {
+  const input = document.getElementById('new-deliverable');
+  const v = input.value.trim();
+  if (!v) return;
+  deliverables.push(v);
+  input.value = '';
+  renderDeliverablesList();
+  if (docGenerated) liveUpdate();
+}
+
+function removeDeliverable(i) {
+  deliverables.splice(i, 1);
+  renderDeliverablesList();
+  if (docGenerated) liveUpdate();
+}
+
+function renderDeliverablesList() {
+  const list = document.getElementById('deliverables-list');
+  list.innerHTML = deliverables.map((d, i) => `
+    <li class="deliverable-item">
+      <span>${escHtml(d)}</span>
+      <button class="del-remove" onclick="removeDeliverable(${i})" title="Remove">×</button>
+    </li>
+  `).join('');
+}
+
+// ─── PHASES ───────────────────────────────────────────────────
+function addPhase() {
+  phases.push({ name: '', duration: '' });
+  renderPhases();
+}
+
+function renderPhases() {
+  const container = document.getElementById('phases-list');
+  container.innerHTML = phases.map((p, i) => `
+    <div class="phase-item">
+      <input type="text" value="${escHtml(p.name)}" placeholder="Phase name"
+        oninput="phases[${i}].name=this.value;if(docGenerated)liveUpdate();" />
+      <input type="text" value="${escHtml(p.duration)}" placeholder="Duration"
+        oninput="phases[${i}].duration=this.value;if(docGenerated)liveUpdate();" />
+    </div>
+  `).join('');
+}
+
+// ─── LINE ITEMS ───────────────────────────────────────────────
+function addLineItem() {
+  lineItems.push({ description: '', amount: 0 });
+  renderLineItems();
+}
+
+function renderLineItems() {
+  const container = document.getElementById('line-items-list');
+  container.innerHTML = lineItems.map((item, i) => `
+    <div class="phase-item" style="grid-template-columns:1fr 110px 36px; gap:0; margin-bottom:4px;">
+      <input type="text" value="${escHtml(item.description)}" placeholder="Service or item"
+        oninput="lineItems[${i}].description=this.value;if(docGenerated)liveUpdate();" />
+      <input type="number" value="${item.amount}" placeholder="0" style="border-left:none;"
+        oninput="lineItems[${i}].amount=parseFloat(this.value)||0;if(docGenerated)liveUpdate();" />
+      <button class="del-remove" onclick="lineItems.splice(${i},1);renderLineItems();if(docGenerated)liveUpdate();"
+        style="font-size:18px;color:var(--grey-3);background:var(--grey-5);border:1px solid var(--grey-4);border-left:none;height:100%;cursor:pointer;padding:0 8px;">×</button>
+    </div>
+  `).join('');
+}
+
+// ─── HELPERS ──────────────────────────────────────────────────
+function escHtml(str) {
+  return String(str)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function val(id) { return document.getElementById(id)?.value?.trim() || ''; }
+function formatCurrency(amount) {
+  const currency = val('currency') || 'USD';
+  const symbols = { USD:'$', EUR:'€', GBP:'£', CAD:'CA$' };
+  return (symbols[currency]||'$') + Number(amount).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+}
+function formatDate(dateStr) {
+  if (!dateStr) return '—';
+  const d = new Date(dateStr + 'T00:00:00');
+  return d.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
+}
+function getDocTypeLabel() {
+  return { proposal:'Project Proposal', sow:'Statement of Work', agreement:'Work Agreement' }[currentDocType] || 'Project Proposal';
+}
+
+// ─── LIVE UPDATE ──────────────────────────────────────────────
+function liveUpdate() { if (docGenerated) renderDocOutput(); }
+
+// ─── GENERATE ─────────────────────────────────────────────────
+function generateDoc() {
+  docGenerated = true;
+  renderDocOutput();
+  document.getElementById('empty-state').style.display = 'none';
+  document.getElementById('preview-scroll').classList.add('visible');
+  document.getElementById('preview-scroll').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// ─── RENDER DOCUMENT ──────────────────────────────────────────
+function renderDocOutput() {
+  const studioName     = val('studio-name')            || 'Your Studio';
+  const studioEmail    = val('studio-email')           || '';
+  const studioLocation = val('studio-location')        || '';
+  const studioWebsite  = val('studio-website')         || '';
+  const clientName     = val('client-name')            || 'Client Name';
+  const clientCompany  = val('client-company')         || '';
+  const clientEmail    = val('client-email')           || '';
+  const projectName    = val('project-name')           || 'Untitled Project';
+  const proposalDate   = val('proposal-date');
+  const projectStart   = val('project-start');
+  const overview       = val('project-overview');
+  const scope          = val('scope-of-work');
+  const pricingNotes   = val('pricing-notes');
+  const customTerms    = val('custom-terms');
+  const studioSig      = val('studio-signatory')       || studioName;
+  const studioSigTitle = val('studio-signatory-title') || '';
+  const currency       = val('currency')               || 'USD';
+
+  const total = lineItems.reduce((s, i) => s + (parseFloat(i.amount)||0), 0);
+
+  // Collect all active clauses
+  const activeClauses = getActiveClauses();
+
+  // Custom freeform terms
+  const customArr = customTerms
+    ? customTerms.split('\n').map(t => t.trim()).filter(Boolean)
+    : [];
+
+  // Group by category for rendering
+  const protectionClauses = activeClauses.filter(c => c.category === 'protection');
+  const practiceClauses   = activeClauses.filter(c => c.category === 'practice');
+
+  const doc = document.getElementById('doc-output');
+
+  doc.innerHTML = `
+    <!-- HEADER -->
+    <div class="doc-studio-name">
+      <span>${escHtml(studioName)}${studioLocation ? ' · ' + escHtml(studioLocation) : ''}</span>
+      <span>${formatDate(proposalDate)}</span>
+    </div>
+
+    <div class="doc-type-label">${getDocTypeLabel()}</div>
+    <h1 class="doc-title">${escHtml(projectName)}</h1>
+    <p class="doc-subtitle">Prepared for ${escHtml(clientName)}${clientCompany ? ', ' + escHtml(clientCompany) : ''}</p>
+
+    <div class="doc-meta-grid">
+      <div class="meta-item">
+        <div class="meta-label">Prepared By</div>
+        <div class="meta-value">${escHtml(studioName)}</div>
+      </div>
+      <div class="meta-item">
+        <div class="meta-label">Prepared For</div>
+        <div class="meta-value">${escHtml(clientName)}${clientCompany ? '<br/><span style="font-weight:400;color:var(--grey-2);">' + escHtml(clientCompany) + '</span>' : ''}</div>
+      </div>
+      <div class="meta-item">
+        <div class="meta-label">Document Date</div>
+        <div class="meta-value">${formatDate(proposalDate)}</div>
+      </div>
+      <div class="meta-item">
+        <div class="meta-label">Project Start</div>
+        <div class="meta-value">${formatDate(projectStart)}</div>
+      </div>
+      ${studioEmail ? `<div class="meta-item"><div class="meta-label">Studio Email</div><div class="meta-value">${escHtml(studioEmail)}</div></div>` : ''}
+      ${clientEmail ? `<div class="meta-item"><div class="meta-label">Client Email</div><div class="meta-value">${escHtml(clientEmail)}</div></div>` : ''}
+    </div>
+
+    <!-- 01 OVERVIEW -->
+    <div class="doc-section">
+      <div class="doc-section-header">
+        <span class="section-num">01</span>
+        <span class="section-title">Project Overview</span>
+      </div>
+      <p class="doc-text">${overview ? escHtml(overview).replace(/\n/g,'<br/>') : 'No overview provided.'}</p>
+    </div>
+
+    <!-- 02 SCOPE -->
+    <div class="doc-section">
+      <div class="doc-section-header">
+        <span class="section-num">02</span>
+        <span class="section-title">Scope of Work</span>
+      </div>
+      <p class="doc-text">${scope ? escHtml(scope).replace(/\n/g,'<br/>') : 'No scope defined yet.'}</p>
+    </div>
+
+    <!-- 03 DELIVERABLES -->
+    <div class="doc-section">
+      <div class="doc-section-header">
+        <span class="section-num">03</span>
+        <span class="section-title">Deliverables</span>
+      </div>
+      ${deliverables.length > 0 ? `
+        <ul class="doc-deliverables">
+          ${deliverables.map(d => `<li>${escHtml(d)}</li>`).join('')}
+        </ul>
+      ` : '<p class="doc-text" style="color:var(--grey-3);">No deliverables specified.</p>'}
+    </div>
+
+    <!-- 04 TIMELINE -->
+    <div class="doc-section">
+      <div class="doc-section-header">
+        <span class="section-num">04</span>
+        <span class="section-title">Timeline</span>
+      </div>
+      ${phases.filter(p => p.name).length > 0 ? `
+        <table class="timeline-table">
+          <thead><tr><th>Phase</th><th style="width:120px;">Duration</th></tr></thead>
+          <tbody>
+            ${phases.filter(p => p.name).map(p => `
+              <tr>
+                <td>${escHtml(p.name)}</td>
+                <td>${escHtml(p.duration || '—')}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      ` : '<p class="doc-text" style="color:var(--grey-3);">No timeline phases defined.</p>'}
+    </div>
+
+    <!-- 05 PRICING -->
+    <div class="doc-section">
+      <div class="doc-section-header">
+        <span class="section-num">05</span>
+        <span class="section-title">Pricing</span>
+      </div>
+      ${lineItems.filter(i => i.description).length > 0 ? `
+        <table class="pricing-table">
+          <thead><tr><th>Description</th><th>Amount</th></tr></thead>
+          <tbody>
+            ${lineItems.filter(i => i.description).map(i => `
+              <tr>
+                <td>${escHtml(i.description)}</td>
+                <td>${formatCurrency(i.amount)}</td>
+              </tr>
+            `).join('')}
+            <tr class="pricing-total-row">
+              <td>Total</td>
+              <td>${formatCurrency(total)}</td>
+            </tr>
+          </tbody>
+        </table>
+        ${pricingNotes ? `<p class="doc-text" style="margin-top:14px;font-size:12px;">${escHtml(pricingNotes).replace(/\n/g,'<br/>')}</p>` : ''}
+      ` : '<p class="doc-text" style="color:var(--grey-3);">No line items added.</p>'}
+    </div>
+
+    <!-- 06 TERMS & PROTECTIONS -->
+    ${(protectionClauses.length > 0 || practiceClauses.length > 0 || customArr.length > 0) ? `
+    <div class="doc-section">
+      <div class="doc-section-header">
+        <span class="section-num">06</span>
+        <span class="section-title">Terms &amp; Conditions</span>
+      </div>
+
+      ${protectionClauses.length > 0 ? `
+        <div class="terms-category-label">Legal Protections</div>
+        ${protectionClauses.map((c, idx) => `
+          <div class="terms-named-clause">
+            <div class="terms-clause-header">
+              <span class="terms-clause-num">${String(idx+1).padStart(2,'0')}</span>
+              <span class="terms-clause-name">${escHtml(c.name)}</span>
+            </div>
+            <p class="doc-text terms-clause-body">${escHtml(c.text)}</p>
+          </div>
+        `).join('')}
+      ` : ''}
+
+      ${practiceClauses.length > 0 ? `
+        <div class="terms-category-label" style="margin-top:24px;">Project Policies</div>
+        ${practiceClauses.map((c, idx) => `
+          <div class="terms-named-clause">
+            <div class="terms-clause-header">
+              <span class="terms-clause-num">${String(idx+1).padStart(2,'0')}</span>
+              <span class="terms-clause-name">${escHtml(c.name)}</span>
+            </div>
+            <p class="doc-text terms-clause-body">${escHtml(c.text)}</p>
+          </div>
+        `).join('')}
+      ` : ''}
+
+      ${customArr.length > 0 ? `
+        <div class="terms-category-label" style="margin-top:24px;">Additional Terms</div>
+        <ul class="terms-list">
+          ${customArr.map(t => `<li>${escHtml(t)}</li>`).join('')}
+        </ul>
+      ` : ''}
+    </div>
+    ` : ''}
+
+    <!-- 07 SIGNATURES -->
+    <div class="doc-section">
+      <div class="doc-section-header">
+        <span class="section-num">07</span>
+        <span class="section-title">Agreement &amp; Signatures</span>
+      </div>
+      <p class="doc-text" style="margin-bottom:24px;">
+        By signing below, both parties agree to the terms and conditions outlined in this ${getDocTypeLabel().toLowerCase()}.
+        This document constitutes a binding agreement upon execution by both parties.
+      </p>
+
+      <div class="signature-grid">
+        <div class="sig-block">
+          <div class="sig-party">Studio / Service Provider</div>
+          <div class="sig-line">
+            <span class="sig-typed">${escHtml(studioSig)}</span>
+          </div>
+          <div class="sig-field-label" style="margin-bottom:12px;">Signature</div>
+          <div style="font-size:13px;font-weight:600;color:var(--black);margin-bottom:4px;">${escHtml(studioSig)}</div>
+          ${studioSigTitle ? `<div style="font-size:12px;color:var(--grey-2);">${escHtml(studioSigTitle)}</div>` : ''}
+          <div class="sig-date" style="margin-top:16px;">
+            <span style="font-family:var(--font-mono);font-size:8px;color:var(--grey-3);text-transform:uppercase;letter-spacing:0.1em;font-weight:700;">Date&nbsp;&nbsp;</span>
+            <span>${formatDate(proposalDate)}</span>
+          </div>
+        </div>
+        <div class="sig-block">
+          <div class="sig-party">Client</div>
+          <div class="sig-line"></div>
+          <div class="sig-field-label" style="margin-bottom:12px;">Signature</div>
+          <div style="font-size:13px;font-weight:600;color:var(--black);margin-bottom:4px;">${escHtml(clientName)}</div>
+          ${clientCompany ? `<div style="font-size:12px;color:var(--grey-2);">${escHtml(clientCompany)}</div>` : ''}
+          <div class="sig-date" style="margin-top:16px;">
+            <span style="font-family:var(--font-mono);font-size:8px;color:var(--grey-3);text-transform:uppercase;letter-spacing:0.1em;font-weight:700;">Date&nbsp;&nbsp;</span>
+            <span style="color:var(--grey-3);">___________________</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- FOOTER -->
+    <div class="doc-footer">
+      <div class="doc-footer-studio">
+        ${escHtml(studioName)}${studioWebsite ? ' · ' + escHtml(studioWebsite) : ''}
+      </div>
+      <div class="doc-footer-page">
+        ${getDocTypeLabel()} · ${formatDate(proposalDate)}
+      </div>
+    </div>
+  `;
+}
+
+// ─── DOWNLOAD PDF ─────────────────────────────────────────────
+async function downloadPDF() {
+  if (!docGenerated) {
+    generateDoc();
+    await new Promise(r => setTimeout(r, 100));
+  }
+  const overlay = document.getElementById('loading-overlay');
+  overlay.classList.add('visible');
+  try {
+    const { jsPDF } = window.jspdf;
+    const docEl = document.getElementById('doc-output');
+    const scrollY = window.scrollY;
+    const canvas = await html2canvas(docEl, { scale:2, useCORS:true, backgroundColor:'#ffffff', logging:false });
+    const imgData = canvas.toDataURL('image/png');
+    const pdf = new jsPDF({ orientation:'portrait', unit:'mm', format:'a4' });
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const usableWidth = pageWidth;
+    const imgWidth = canvas.width;
+    const imgHeight = canvas.height;
+    const ratio = usableWidth / (imgWidth * 0.264583);
+    const scaledHeight = imgHeight * 0.264583 * ratio;
+    let yOffset = 0, pageNum = 0;
+    while (yOffset < scaledHeight) {
+      if (pageNum > 0) pdf.addPage();
+      const sourceY = (yOffset / scaledHeight) * imgHeight;
+      const sourceH = Math.min((pageHeight / scaledHeight) * imgHeight, imgHeight - sourceY);
+      const sliceCanvas = document.createElement('canvas');
+      sliceCanvas.width = imgWidth; sliceCanvas.height = sourceH;
+      const ctx = sliceCanvas.getContext('2d');
+      ctx.drawImage(canvas, 0, sourceY, imgWidth, sourceH, 0, 0, imgWidth, sourceH);
+      const sliceData = sliceCanvas.toDataURL('image/png');
+      const sliceHeightMM = (sourceH / imgHeight) * scaledHeight;
+      pdf.addImage(sliceData, 'PNG', 0, 0, usableWidth, sliceHeightMM);
+      yOffset += pageHeight; pageNum++;
+    }
+    const pName = val('project-name') || 'project';
+    const cName = val('client-name') || 'client';
+    pdf.save(`${pName.replace(/\s+/g,'-').toLowerCase()}_${currentDocType}_${cName.replace(/\s+/g,'-').toLowerCase()}.pdf`);
+    window.scrollTo(0, scrollY);
+  } catch(err) {
+    console.error('PDF error:', err);
+    alert('PDF generation failed. Please try again.');
+  } finally {
+    overlay.classList.remove('visible');
+  }
+}
+</script>
+</body>
+</html>
